@@ -48,3 +48,5 @@ next-env.d.ts
 !.planning/config.json
 !.planning/PROJECT.md
 !.planning/ROADMAP.md
+!.planning/STATE.md
+!.planning/**/*.SUMMARY.md
