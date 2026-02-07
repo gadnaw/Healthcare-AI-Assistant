@@ -1,0 +1,23 @@
+{
+  "project": {
+    "name": "Healthcare AI Assistant (HIPAA-Aware RAG)",
+    "milestone": "MVP",
+    "initialized": "2026-02-07"
+  },
+  "early_config": {
+    "mode": "guided",
+    "commit_docs": true
+  },
+  "research": {
+    "depth": "standard",
+    "model_profile": "balanced",
+    "sequential_workflow": {
+      "enabled": false
+    }
+  },
+  "brownfield": {
+    "enabled": false,
+    "detected": false,
+    "hybrid_mode": false
+  }
+}
