@@ -1,0 +1,301 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// PHASE 1: Foundation Models (Existing)
+// ============================================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password_hash String
+  first_name    String?
+  last_name     String?
+  role          Role      @default(STAFF)
+  is_active     Boolean   @default(true)
+  mfa_enabled   Boolean   @default(false)
+  mfa_secret    String?
+  org_id        String
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+  last_login    DateTime?
+
+  @@index([org_id])
+}
+
+model Organization {
+  id                  String    @id @default(uuid())
+  name                String
+  slug                String    @unique
+  settings            Json?
+  subscription_tier   String    @default("free")
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+}
+
+model Session {
+  id            String    @id @default(uuid())
+  user_id       String
+  token         String    @unique
+  expires_at    DateTime
+  ip_address    String?
+  user_agent    String?
+  created_at    DateTime  @default(now())
+}
+
+model EmergencyAccessGrant {
+  id            String    @id @default(uuid())
+  user_id       String
+  patient_id    String?
+  reason       String
+  approved_by   String?
+  approved_at   DateTime?
+  expires_at    DateTime
+  used_at       DateTime?
+  revoked_at    DateTime?
+  revoked_by    String?
+  created_at    DateTime  @default(now())
+}
+
+model AuditLog {
+  id            String      @id @default(uuid())
+  action_type   ActionType
+  entity_type   String
+  entity_id     String
+  user_id       String
+  org_id        String
+  ip_address    String?
+  user_agent    String?
+  metadata      Json?
+  created_at    DateTime    @default(now())
+
+  @@index([org_id])
+  @@index([user_id])
+  @@index([action_type])
+  @@index([created_at])
+}
+
+// ============================================
+// PHASE 2: Document Management Models (Existing)
+// ============================================
+
+model Document {
+  id            String          @id @default(uuid())
+  title         String
+  file_url      String
+  file_type     String
+  file_size     Int
+  chunk_count   Int             @default(0)
+  status        DocumentStatus  @default(DRAFT)
+  uploaded_by   String
+  org_id        String
+  metadata      Json?
+  embedding_id  String?
+  created_at    DateTime        @default(now())
+  updated_at    DateTime        @updatedAt
+  deprecated_at DateTime?
+  deleted_at    DateTime?
+
+  @@index([org_id])
+  @@index([uploaded_by])
+  @@index([status])
+}
+
+model DocumentChunk {
+  id            String    @id @default(uuid())
+  document_id   String
+  content       String    @db.Text
+  chunk_index   Int
+  embedding     Unsupported("vector(1536)")?
+  metadata      Json?
+  created_at    DateTime  @default(now())
+
+  @@index([document_id])
+}
+
+model Message {
+  id            String    @id @default(uuid())
+  conversation_id String
+  role          String
+  content       String    @db.Text
+  citations     Json?
+  user_id       String
+  org_id        String
+  created_at    DateTime  @default(now())
+
+  @@index([conversation_id])
+  @@index([user_id])
+}
+
+model Conversation {
+  id            String    @id @default(uuid())
+  title         String?
+  user_id       String
+  org_id        String
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  @@index([user_id])
+}
+
+// ============================================
+// PHASE 3: Safety Layer Models (Existing)
+// ============================================
+
+model PHIDetectionLog {
+  id            String    @id @default(uuid())
+  user_id       String
+  org_id        String
+  input_text    String    @db.Text
+  detected_type String
+  confidence    Float
+  action_taken  String
+  created_at    DateTime  @default(now())
+
+  @@index([user_id])
+  @@index([created_at])
+}
+
+model InjectionAttemptLog {
+  id            String    @id @default(uuid())
+  user_id       String?
+  org_id        String
+  pattern_type  String
+  confidence    Float
+  blocked       Boolean
+  created_at    DateTime  @default(now())
+
+  @@index([org_id])
+  @@index([created_at])
+}
+
+// ============================================
+// PHASE 4: Compliance & Features Models (NEW)
+// ============================================
+
+model Feedback {
+  id            String    @id @default(uuid())
+  message_id    String
+  user_id       String
+  org_id        String
+  helpful       Boolean
+  comment       String?   @db.VarChar(500)
+  created_at    DateTime  @default(now())
+
+  @@unique([message_id, user_id])
+  @@index([org_id])
+  @@index([message_id])
+  @@index([created_at])
+}
+
+model Justification {
+  id                  String            @id @default(uuid())
+  emergency_access_id String
+  user_id             String
+  justification_text  String           @db.VarChar(2000)
+  reviewed_by         String?
+  reviewed_at         DateTime?
+  status              JustificationStatus @default(PENDING)
+  created_at          DateTime          @default(now())
+
+  @@index([emergency_access_id])
+  @@index([user_id])
+  @@index([status])
+}
+
+model DocumentApproval {
+  id            String              @id @default(uuid())
+  document_id   String
+  requested_by  String
+  reviewed_by   String?
+  status        DocumentApprovalStatus @default(PENDING)
+  comments      String?             @db.Text
+  created_at    DateTime            @default(now())
+  reviewed_at   DateTime?
+
+  @@index([document_id])
+  @@index([status])
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Role {
+  ADMIN
+  PROVIDER
+  STAFF
+}
+
+enum ActionType {
+  // Authentication events
+  USER_LOGIN
+  USER_LOGOUT
+  USER_LOGIN_FAILED
+  MFA_ENABLED
+  MFA_DISABLED
+  PASSWORD_CHANGED
+  
+  // Document events
+  DOCUMENT_UPLOAD
+  DOCUMENT_VIEW
+  DOCUMENT_DOWNLOAD
+  DOCUMENT_DELETE
+  DOCUMENT_APPROVE
+  DOCUMENT_REJECT
+  DOCUMENT_DEPRECATE
+  
+  // Chat events
+  CHAT_MESSAGE
+  CHAT_FEEDBACK
+  
+  // User management events
+  USER_INVITE
+  USER_CREATED
+  USER_DEACTIVATE
+  USER_REACTIVATE
+  ROLE_ASSIGN
+  
+  // Emergency access events
+  EMERGENCY_ACCESS_REQUESTED
+  EMERGENCY_ACCESS_GRANTED
+  EMERGENCY_ACCESS_USED
+  EMERGENCY_ACCESS_REVOKED
+  JUSTIFICATION_SUBMITTED
+  
+  // Audit events
+  AUDIT_EXPORT
+  AUDIT_VIEW
+  
+  // System events
+  SETTINGS_CHANGED
+  SYSTEM_ERROR
+}
+
+enum DocumentStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  DEPRECATED
+  ARCHIVED
+}
+
+enum JustificationStatus {
+  PENDING
+  APPROVED
+  ESCALATED
+  REJECTED
+}
+
+enum DocumentApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}

@@ -25,7 +25,9 @@ import { createEmbeddingService } from '@/document/embedding/EmbeddingService';
 import { citationGenerator, citationVerifier, citationFormatter } from '@/safety/citation';
 import { groundednessScorer, groundednessValidator } from '@/safety/grounding';
 import { clinicalSystemPrompt, systemPromptIsolator } from '@/safety/system-prompt';
+import { withRateLimiting, extractRateLimitContext, createRateLimitHeaders } from '@/middleware/rate-limit';
 import { Message } from '@/types/chat';
+import { detectJailbreak } from '@/lib/security/jailbreak-defense';
 
 // ============================================================================
 // Configuration
@@ -89,6 +91,59 @@ interface RetrievalResult {
 // ============================================================================
 // Safety Pipeline Functions
 // ============================================================================
+
+/**
+ * Stage 0: Jailbreak Detection (FIRST LINE OF DEFENSE)
+ * Detects and blocks jailbreak attempts before any other processing
+ */
+async function detectJailbreakAttempt(input: string, orgId: string): Promise<{
+  blocked: boolean;
+  reason?: string;
+  detection?: any;
+}> {
+  const detection = await detectJailbreak(input);
+  
+  if (detection.isJailbreak) {
+    // Log the jailbreak attempt
+    await auditService.log({
+      action: 'JAILBREAK_DETECTED_CHAT',
+      entityType: 'security',
+      entityId: detection.timestamp.toISOString(),
+      metadata: {
+        confidence: detection.confidence,
+        category: detection.category,
+        severity: detection.severity,
+        indicators: detection.indicators,
+        inputLength: input.length,
+        orgId
+      }
+    });
+
+    // Trigger security alert for critical/high severity
+    if (detection.severity === 'critical' || detection.severity === 'high') {
+      await auditService.log({
+        action: 'SECURITY_ALERT_JAILBREAK_CHAT',
+        entityType: 'security_alert',
+        entityId: detection.timestamp.toISOString(),
+        metadata: {
+          severity: detection.severity,
+          category: detection.category,
+          confidence: detection.confidence,
+          indicators: detection.indicators,
+          requiresReview: true
+        }
+      });
+    }
+
+    return { 
+      blocked: true, 
+      reason: `Jailbreak attempt detected (${detection.category})`,
+      detection
+    };
+  }
+  
+  return { blocked: false };
+}
 
 /**
  * Stage 1: PHI Detection
@@ -386,6 +441,25 @@ async function executeSafetyPipeline(input: ChatRequest): Promise<ChatResponse> 
   const safetyViolations: string[] = [];
 
   // =========================================================================
+  // Stage 0: Jailbreak Detection (FIRST LINE OF DEFENSE)
+  // =========================================================================
+  const jailbreakResult = await detectJailbreakAttempt(message, orgId);
+  if (jailbreakResult.blocked) {
+    safetyViolations.push('JAILBREAK_DETECTED');
+    await auditService.logChatRequestProcessed(message, false, safetyViolations, orgId);
+    return {
+      allowed: false,
+      blockedReason: jailbreakResult.reason,
+      safetyEvents: {
+        phiDetected: false,
+        injectionDetected: false,
+        intentType: 'unknown',
+        groundednessScore: 0
+      }
+    };
+  }
+
+  // =========================================================================
   // Stage 1: PHI Detection
   // =========================================================================
   const phiResult = await detectPHI(message, orgId);
@@ -603,27 +677,12 @@ async function executeSafetyPipeline(input: ChatRequest): Promise<ChatResponse> 
 // ============================================================================
 
 /**
- * Chat API Endpoint
- * 
- * Processes chat requests through complete safety pipeline:
- * PHI detection → Intent classification → RAG retrieval → 
- * Groundedness scoring → Citation generation → Response
- * 
- * Request Body:
- * - message: User message (required)
- * - orgId: Organization ID (required)
- * - userId: User ID (required)
- * - conversationHistory: Optional conversation history
- * - maxResults: Maximum chunks to retrieve (default: 5)
- * - minSimilarity: Minimum similarity threshold (default: 0.7)
- * 
- * Returns:
- * - 200: Response with safety metadata
- * - 400: Missing or invalid request body
- * - 401: Unauthorized
- * - 500: Server error
+ * Internal chat handler logic (extracted for rate limiting wrapper)
  */
-export async function POST(request: NextRequest): Promise<NextResponse<ChatResponse>> {
+async function handleChatRequest(
+  request: NextRequest,
+  context: { organizationId: string; userId: string; sessionId: string; clinicalPriority?: boolean }
+): Promise<NextResponse<ChatResponse>> {
   try {
     // Validate environment configuration
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
@@ -677,3 +736,65 @@ export async function POST(request: NextRequest): Promise<NextResponse<ChatRespo
     );
   }
 }
+
+/**
+ * Chat API Endpoint with Rate Limiting
+ * 
+ * Processes chat requests through complete safety pipeline with rate limiting:
+ * Rate Limiting → PHI detection → Intent classification → RAG retrieval → 
+ * Groundedness scoring → Citation generation → Response
+ * 
+ * Rate Limits:
+ * - Organization: 1000 requests/minute
+ * - User: 60 requests/minute  
+ * - Session: 10 concurrent requests
+ * 
+ * Rate Limit Headers:
+ * - X-RateLimit-Limit: Maximum requests allowed
+ * - X-RateLimit-Remaining: Remaining requests in window
+ * - X-RateLimit-Reset: Unix timestamp when limit resets
+ * 
+ * Request Body:
+ * - message: User message (required)
+ * - orgId: Organization ID (required)
+ * - userId: User ID (required)
+ * - conversationHistory: Optional conversation history
+ * - maxResults: Maximum chunks to retrieve (default: 5)
+ * - minSimilarity: Minimum similarity threshold (default: 0.7)
+ * 
+ * Returns:
+ * - 200: Response with safety metadata
+ * - 400: Missing or invalid request body
+ * - 401: Unauthorized
+ * - 429: Rate limit exceeded
+ * - 500: Server error
+ */
+export const POST = withRateLimiting(async (request: NextRequest, context) => {
+  // Extract rate limit context
+  const { organizationId, userId, sessionId, clinicalPriority } = context;
+  
+  // Log rate limit context for audit
+  await auditService.log({
+    action: 'RATE_LIMIT_CHECK',
+    entity_type: 'chat_request',
+    entity_id: `${organizationId}:${userId}:${sessionId}`,
+    metadata: {
+      orgId: organizationId,
+      userId: userId,
+      sessionId: sessionId,
+      clinicalPriority: clinicalPriority,
+      timestamp: new Date().toISOString()
+    },
+    ip_address: request.headers.get('x-forwarded-for') || 
+                request.headers.get('x-real-ip') || 
+                'unknown'
+  });
+  
+  // Execute chat handler
+  return await handleChatRequest(request, {
+    organizationId,
+    userId,
+    sessionId,
+    clinicalPriority
+  });
+});
