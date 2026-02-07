@@ -12,9 +12,9 @@
 
 ### Phase 1: Foundation & Auth - Progress
 
-**Current Wave:** 3 of 5 complete  
-**Plans Completed:** 3 of 5 (Waves 1-3)  
-**Current Status:** ✅ In Progress - MFA Implementation
+**Current Wave:** 4 of 5 complete  
+**Plans Completed:** 4 of 5 (Waves 1-4)  
+**Current Status:** ✅ In Progress - Session Management
 
 #### Wave Progress
 
@@ -23,61 +23,59 @@
 | 1 | 01-01 | Database Foundation & RLS | ✅ Complete | 3/3 |
 | 2 | 01-02 | JWT Claims & Auth Hooks | ✅ Complete | 2/2 |
 | 3 | 01-03 | MFA Implementation | ✅ Complete | 4/4 |
-| 4 | 01-04 | Session Management | ⏳ Pending | - |
+| 4 | 01-04 | Session Management | ✅ Complete | 4/4 |
 | 5 | 01-05 | Audit Logging | ⏳ Pending | - |
 
 #### Phase 1 Progress Bar
 
 ```
 Phase 1: Foundation & Auth
-████████████████████████████████████████░░░░░░░░░░░░░░░░░░░░░░░ 60% complete (3/5 plans)
+██████████████████████████████████████████████████░░░░░░░░░░░░░ 80% complete (4/5 plans)
 ```
 
-#### Completed This Wave (01-03)
+#### Completed This Wave (01-04)
 
 **Tasks Completed:**
-- ✅ Task 3.1: Create MFA Enrollment API Routes (`app/api/auth/mfa/enroll/route.ts`, `app/api/auth/mfa/verify/route.ts`)
-- ✅ Task 3.2: Create MFA Challenge Route (`app/api/auth/mfa/challenge/route.ts`)
-- ✅ Task 3.3: Create MFA Enrollment UI Components (`components/auth/MFASetup.tsx`, `components/auth/MFAChallenge.tsx`)
-- ✅ Task 3.4: Create MFA Restrictive Policy (`supabase/policies/03-mfa-restrictive-policy.sql`)
+- ✅ Task 4.1: Configure Supabase Session Settings (`docs/session-configuration.md`)
+- ✅ Task 4.2: Create Client-Side Session Monitor (`components/auth/SessionTimeoutMonitor.tsx`)
+- ✅ Task 4.3: Create Account Lockout Function (`supabase/auth/02-account-lockout-hook.sql`)
+- ✅ Task 4.4: Create Failed Login Trigger (`supabase/auth/03-failed-login-trigger.sql`)
 
 **Key Deliverables:**
-- TOTP-based MFA enrollment API with QR code generation
-- MFA verification endpoint for completing enrollment
-- Login-time MFA challenge flow
-- React components for enrollment and verification UI
-- HIPAA-compliant RLS policies requiring AAL2 for PHI access
-- Helper functions: has_mfa_verified(), get_user_aal(), require_mfa()
+- HIPAA-compliant session configuration (15-min timeout, 480-min timebox)
+- Client-side session timeout monitor with countdown and extend session option
+- Account lockout after 5 failed attempts (30-minute lockout duration)
+- IP-based rate limiting (20 attempts/IP/15min) for distributed attack prevention
+- Comprehensive security monitoring views and admin unlock workflows
+- All failed attempts logged with IP address and user agent
 
 **Commits:**
-- `4cdbd45`: feat(01-03): create MFA enrollment API routes
-- `6b5e933`: feat(01-03): create MFA challenge route
-- `1aebb7e`: feat(01-03): create MFA enrollment UI components
-- `1075dde`: feat(01-03): create MFA restrictive RLS policies
+- `9305652`: feat(01-04): document session configuration settings
+- `0c5d5b8`: feat(01-04): create client-side session monitor component
+- `9ee6c6a`: feat(01-04): create account lockout functions
+- `fda7afc`: feat(01-04): create failed login tracking
 
 **Files Created:**
-- `app/api/auth/mfa/enroll/route.ts` - MFA enrollment initiation
-- `app/api/auth/mfa/verify/route.ts` - TOTP verification
-- `app/api/auth/mfa/challenge/route.ts` - Login MFA challenge
-- `components/auth/MFASetup.tsx` - Enrollment UI component
-- `components/auth/MFAChallenge.tsx` - Challenge UI component
-- `supabase/policies/03-mfa-restrictive-policy.sql` - RLS policies
+- `docs/session-configuration.md` - Session configuration guide
+- `components/auth/SessionTimeoutMonitor.tsx` - Client-side session monitor
+- `supabase/auth/02-account-lockout-hook.sql` - Account lockout functions
+- `supabase/auth/03-failed-login-trigger.sql` - Failed login tracking and rate limiting
 
 #### Next Steps
 
-**Upcoming:** Plan 01-04 - Session Management
-- Build upon MFA enrollment (aal2 claims available)
-- Implement 15-minute session timeout
-- Handle session refresh and re-authentication
-- Emergency access workflow design
+**Upcoming:** Plan 01-05 - Audit Logging
+- Build upon session management (session events available)
+- Implement tamper-proof audit logging
+- Capture all authenticated events for compliance
+- Emergency access audit trail
 
 ---
 
 #### Session Continuity
 
 **Last Session:** February 7, 2026  
-**Stopped At:** Completed Plan 01-03 (MFA Implementation)  
-**Resume Point:** Plan 01-04 (Session Management)  
+**Stopped At:** Completed Plan 01-04 (Session Management)  
+**Resume Point:** Plan 01-05 (Audit Logging)  
 **No Checkpoint Files:** Plan executed to completion without pausing
 
 ---
@@ -97,6 +95,9 @@ Phase 1: Foundation & Auth
 | 1-03 | AAL2 fallback to MFA factors | Auth hook may not have updated token | Dual check ensures correctness |
 | 1-03 | Helper functions for MFA status | Reusable across application code | Consistent MFA status checking |
 | 1-03 | TOTP-only for MVP | Widely supported, no SMS dependency | Backup codes for recovery |
+| 1-04 | 30-minute lockout duration | Balances security with usability | 2x penalty factor on attack window |
+| 1-04 | Client-side + server-side enforcement | Defense in depth for HIPAA | Better UX with server-side guarantee |
+| 1-04 | Separate IP rate limiting | Prevents distributed attacks | 20 attempts/IP/15min threshold |
 
 ### Constraints on This Execution
 
@@ -116,7 +117,7 @@ Phase 1: Foundation & Auth
 
 ### Alignment Status
 
-✅ **On Track** - Phase 1 progressing as planned. Auth infrastructure foundation complete. MFA enforcement implemented and RLS policies deployed.
+✅ **On Track** - Phase 1 progressing as planned. Auth infrastructure foundation complete. MFA enforcement implemented. Session timeout and account lockout deployed. Ready for audit logging.
 
 ---
 
@@ -136,6 +137,15 @@ Phase 1: Foundation & Auth
 |------|-------|--------------|
 | 01-04 | Session Management | 01-03 (requires aal2 claims) |
 | 01-05 | Audit Logging | 01-01 (requires schema), 01-04 (session context) |
+
+### Recently Completed
+
+| Plan | Summary | Status |
+|------|---------|--------|
+| 01-01 | Multi-tenant schema with RLS policies | ✅ Complete |
+| 01-02 | JWT claims injection with MFA status | ✅ Complete |
+| 01-03 | MFA Implementation | ✅ Complete |
+| 01-04 | Session Management & Account Lockout | ✅ Complete |
 
 ---
 
