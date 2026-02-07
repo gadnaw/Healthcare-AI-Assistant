@@ -1,0 +1,157 @@
+{
+  "analyzer": "interface",
+  "findings": [
+    {
+      "id": "IFACE-001",
+      "title": "Missing GroundednessValidator provider",
+      "severity": "HIGH",
+      "phases_affected": [3],
+      "category": "missing_provider",
+      "details": "Phase 3's CitationSystem.generateCitationMetadata references GroundednessValidator but Phase 3 research only provides GroundednessScorer. No module creates GroundednessValidator interface.",
+      "suggestion": "Add GroundednessValidator to Phase 3 research, either as part of GroundednessScorer or as a separate provider.",
+      "resolution_type": "re-research"
+    },
+    {
+      "id": "IFACE-002",
+      "title": "FeedbackService not provided by any phase",
+      "severity": "HIGH", 
+      "phases_affected": [4],
+      "category": "missing_provider",
+      "details": "Phase 4 requires FeedbackService for user feedback collection, but no phase research creates this service. Phase 3 context mentions feedback mechanism as dependency.",
+      "suggestion": "Add FeedbackService creation to Phase 4 or Phase 3 research.",
+      "resolution_type": "re-research"
+    },
+    {
+      "id": "IFACE-003",
+      "title": "Citation format mismatch between phases",
+      "severity": "HIGH",
+      "phases_affected": [2, 3],
+      "category": "contract_mismatch",
+      "details": "Phase 2 uses chunk_id in citations, Phase 3 CitationSystem expects sourceId referencing RetrievedChunk.id. Phase 3 defines chunkIndex but Phase 2 doesn't provide chunk_index in RetrievedChunk interface.",
+      "suggestion": "Align citation interfaces: ensure Phase 2 RetrievedChunk includes chunk_index, and Phase 3 CitationSystem uses consistent field names.",
+      "resolution_type": "re-research"
+    },
+    {
+      "id": "IFACE-004",
+      "title": "Duplicate PHI detection implementations",
+      "severity": "MEDIUM",
+      "phases_affected": [1, 3],
+      "category": "contract_mismatch",
+      "details": "Phase 1 provides RLS policies for PHI access control but not PHI detection service. Phase 3 provides PHIDetector. PHI prevention layer in ARCHITECTURE.md conflicts - should PHI detection be Phase 1 (access control) or Phase 3 (input sanitization)?",
+      "suggestion": "Clarify responsibility: Move PHIDetector to Phase 1 as foundation, or document that Phase 3 enhances Phase 1 RLS with application-layer detection.",
+      "resolution_type": "re-discuss"
+    },
+    {
+      "id": "IFACE-005",
+      "title": "AuditService defined in multiple phases",
+      "severity": "LOW",
+      "phases_affected": [1, 4, 5],
+      "category": "orphan_export",
+      "details": "Phase 1 provides audit triggers at database layer. Phase 4 provides AuditService. Phase 5 provides audit logger with integrity hashing. No single source of truth for audit interface.",
+      "suggestion": "Consolidate audit services: Phase 1 provides base audit_log table, Phase 4 provides AuditService, Phase 5 provides enhanced logger. Document inheritance chain.",
+      "resolution_type": "re-research"
+    },
+    {
+      "id": "IFACE-006",
+      "title": "ClinicalSplitter exported but interface unclear",
+      "severity": "LOW",
+      "phases_affected": [2],
+      "category": "interface_drift",
+      "details": "Phase 2 mentions ClinicalSplitter but doesn't define its public interface. Only createClinicalSplitter() factory function shown, not ClinicalSplitter class/interface.",
+      "suggestion": "Add explicit ClinicalSplitter interface definition to Phase 2 research.",
+      "resolution_type": "re-research"
+    },
+    {
+      "id": "IFACE-007",
+      "title": "Conversation context interface not defined",
+      "severity": "MEDIUM",
+      "phases_affected": [2, 3],
+      "category": "missing_provider",
+      "details": "Phase 3 CitationSystem expects RetrievedChunk with documentId and content, but Phase 2 OrgScopedVectorStore.similaritySearch returns objects with document_id and documentName. Field naming inconsistency (camelCase vs snake_case).",
+      "suggestion": "Align field names: use consistent naming convention across all phases, prefer camelCase for TypeScript interfaces.",
+      "resolution_type": "re-research"
+    },
+    {
+      "id": "IFACE-008",
+      "title": "Role-based access not integrated with Phase 1 auth",
+      "severity": "HIGH",
+      "phases_affected": [1, 4],
+      "category": "broken_import",
+      "details": "Phase 4 RBACService assigns roles to users but Phase 1 auth only sets org_id and aal in JWT claims. No role claim injection documented in Phase 1 JWT claims structure.",
+      "suggestion": "Phase 1 must add 'role' to JWT claims via custom_access_token_hook, or Phase 4 RBACService must query database on every permission check.",
+      "resolution_type": "re-research"
+    }
+  ],
+  "summary": {
+    "critical": 0,
+    "high": 5,
+    "medium": 2,
+    "low": 1
+  },
+  "interface_map": {
+    "provides": {
+      "1": [
+        "MFAEnrollmentResult",
+        "SessionClaims", 
+        "Supabase MFA APIs (enroll/challenge/verify)",
+        "custom_access_token_hook",
+        "audit_trigger_function",
+        "RLS policies",
+        "Storage RLS policies"
+      ],
+      "2": [
+        "ClinicalSplitter",
+        "OrgScopedVectorStore",
+        "DocumentStatusTracker",
+        "CascadeDeleter",
+        "ClinicalFileValidator",
+        "DocumentProcessingResult",
+        "ClinicalChunk"
+      ],
+      "3": [
+        "PHIDetector",
+        "PHIDetectionResult",
+        "CitationSystem",
+        "GeneratedCitation",
+        "QueryIntentClassifier",
+        "GroundednessScorer",
+        "PromptInjectionDetector"
+      ],
+      "4": [
+        "DocumentWorkflowEngine",
+        "RBACService",
+        "AuditService",
+        "EmergencyAccessService",
+        "OrganizationSettingsService",
+        "FeedbackService"
+      ],
+      "5": [
+        "RateLimiter",
+        "AuditLogger",
+        "JailbreakTester",
+        "GovernanceCommittee",
+        "ClinicalPerformanceMetrics",
+        "IncidentResponse"
+      ],
+      "ARCHITECTURE": [
+        "PHIPreventionService",
+        "ClinicalSafetyPrompt",
+        "SessionManager",
+        "RAGPipeline"
+      ]
+    },
+    "requires": {
+      "1": [],
+      "2": ["Phase 1: Auth, RLS, audit logging"],
+      "3": ["Phase 2: RAG pipeline operational"],
+      "4": ["Phase 1: Auth, RLS, audit logging", "Phase 3: Safety layer"],
+      "5": ["Phase 4: All features implemented"]
+    }
+  },
+  "unresolved_interfaces": [
+    "GroundednessValidator - referenced but not defined",
+    "FeedbackService - required but not created", 
+    "RoleClaimInjection - Phase 4 needs but Phase 1 doesn't provide",
+    "ClinicalSplitter interface - mentioned but not defined"
+  ]
+}
